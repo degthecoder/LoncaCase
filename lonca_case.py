@@ -19,7 +19,6 @@ class ProductParser:
             "Kumaş Bilgisi": "fabric",
             "Ürün Ölçüleri": "product_measurements",
             "Model Ölçüleri": "model_measurements",
-            "Modelin üzerindeki ürün": "sample_size",
         }
 
         matches = re.findall(r"<li><strong>(.*?):\s*</strong>(.*?)(?:</li>|$)", description)
@@ -28,11 +27,24 @@ class ProductParser:
         for key, value in matches:
             key = key.strip() 
             value = value.strip()  
-            print(key, ": " ,value)
+            # print(key, ": " ,value)
             
-            description_dict[key_map.get(key, key)] = value
+            # To map the key even if the name is wrong due to Model Olculeri sometimes being recorded with anomalies
+            new_key = next(
+                (abbr for tr_name, abbr in key_map.items() if key.startswith(tr_name)),
+                key
+            )
+            
+            description_dict[new_key] = value
         
-        print("PM: ", description_dict.get("product_measurements"), "\n")
+        
+        # To get the size manually
+        get_strong = re.findall(r"<strong>(.*?)</strong>", description)
+        size = get_strong[-1] if get_strong else None
+        if size != list(key_map.keys())[-1]:
+            description_dict["sample_size"] = size
+        
+        # print("PM: ", description_dict.get("product_measurements"), "\n")
         
         return description_dict
 
@@ -51,6 +63,8 @@ class ProductParser:
         discounted_price = float(details.get("DiscountedPrice", "0").replace(",", "."))
 
         is_discounted = discounted_price < price
+        
+        is_active = "Active" if int(details.get("Quantity", "0")) > 0 else "Inactive"
 
         description_data = self.description_info(product.find("Description").text)
 
@@ -68,14 +82,14 @@ class ProductParser:
             "price_unit": "USD", 
             "product_type": details.get("ProductType", "").capitalize(),
             "quantity": int(details.get("Quantity", "0")),
-            "sample_size": description_data.get("sample_size"),  # Details ?
+            "sample_size": description_data.get("sample_size"),  
             "series": details.get("Series", ""),
-            "status": "Active",  # Details ?
+            "status": is_active,
             "fabric": description_data.get("fabric"),  
             "model_measurements": description_data.get("model_measurements"),  
             "product_measurements": description_data.get("product_measurements"), 
-            "createdAt": datetime.now(timezone.utc),
-            "updatedAt": datetime.now(timezone.utc),
+            "createdAt": datetime.now(timezone.utc).isoformat(timespec='milliseconds'),
+            "updatedAt": datetime.now(timezone.utc).isoformat(timespec='milliseconds'),
         }
 
     def parse_products(self):
